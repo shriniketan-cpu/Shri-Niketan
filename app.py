@@ -1,0 +1,110 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+st.set_page_config(layout="wide", page_title="Fulfillment Dashboard")
+st.title("🎯 Customer Target & Fulfillment Dashboard")
+
+# -----------------------------------------
+# NO-KEY GOOGLE SHEETS CONNECTION
+# -----------------------------------------
+# 1. PASTE YOUR SHEET ID HERE:
+SHEET_ID = "https://docs.google.com/spreadsheets/d/15jP3vpX1cgH84UxmOU55clAU2BEk55hu9UhHHJDT4qk/edit?gid=837089170#gid=837089170"
+
+# 2. This URL tells Google Sheets to export your specific data tab as a CSV file
+csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+
+@st.cache_data(ttl=300) # Refreshes and pulls fresh data from your sheet every 5 minutes
+def load_data():
+    return pd.read_csv(csv_url)
+
+try:
+    df = load_data()
+except Exception as e:
+    st.error("Could not retrieve data. Please ensure 'Anyone with the link' access is enabled on your Google Sheet.")
+    st.stop()
+
+# -----------------------------------------
+# SIDEBAR FILTERS
+# -----------------------------------------
+st.sidebar.header("Dashboard Filters")
+
+months = ["All"] + list(df["Month"].unique())
+selected_month = st.sidebar.selectbox("Filter by Month", months)
+
+categories = ["All"] + list(df["Category"].unique())
+selected_category = st.sidebar.selectbox("Filter by Product Category", categories)
+
+types = ["All"] + list(df["Type"].unique())
+selected_type = st.sidebar.selectbox("Customer Type Filter", types)
+
+# Apply filters
+filtered_df = df.copy()
+if selected_month != "All":
+    filtered_df = filtered_df[filtered_df["Month"] == selected_month]
+if selected_category != "All":
+    filtered_df = filtered_df[filtered_df["Category"] == selected_category]
+if selected_type != "All":
+    filtered_df = filtered_df[filtered_df["Type"] == selected_type]
+
+# -----------------------------------------
+# CORE KPI METRICS
+# -----------------------------------------
+st.subheader("📋 Performance Overview")
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+total_target = int(filtered_df["Promise Qty"].sum())
+planned_achieved = int(filtered_df["Planned Customer Qty Achieved"].sum())
+unplanned_achieved = int(filtered_df["Unplanned Customer Qty Achieved"].sum())
+total_balance_lapse = int(filtered_df[filtered_df["Type"] == "Promise Customer"]["Balance Qty"].sum())
+
+target_clearance_rate = (planned_achieved / total_target * 100) if total_target > 0 else 100.0
+
+with kpi1:
+    st.metric("Total Promised Target Qty", f"{total_target} units")
+with kpi2:
+    st.metric("Planned Qty Achieved", f"{planned_achieved} units", f"Clearance: {target_clearance_rate:.1f}%")
+with kpi3:
+    st.metric("Target Deficit Balance", f"{total_balance_lapse} units", delta=f"-{total_balance_lapse}", delta_color="inverse")
+with kpi4:
+    st.metric("Organic Unplanned Sales", f"{unplanned_achieved} units")
+
+st.markdown("---")
+
+# -----------------------------------------
+# VISUAL CHARTS
+# -----------------------------------------
+col_left, col_right = st.columns(2)
+
+with col_left:
+    st.subheader("Target vs Planned Achievement per Client")
+    promise_df = filtered_df[filtered_df["Promise Qty"] > 0]
+    if not promise_df.empty:
+        df_melted = promise_df.melt(
+            id_vars=["Customer Name"], 
+            value_vars=["Promise Qty", "Planned Customer Qty Achieved"],
+            var_name="Metric", value_name="Units"
+        )
+        fig_targets = px.bar(
+            df_melted, x="Customer Name", y="Units", color="Metric",
+            barmode="group", color_discrete_sequence=["#3182ce", "#319795"]
+        )
+        st.plotly_chart(fig_targets, use_container_width=True)
+    else:
+        st.info("No active promise target customers found within the current filter scope.")
+
+with col_right:
+    st.subheader("Account Allocation Status Mix")
+    status_counts = filtered_df["Status"].value_counts().reset_index()
+    status_counts.columns = ["Fulfillment Status", "Count"]
+    fig_status = px.pie(
+        status_counts, names="Fulfillment Status", values="Count",
+        hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe
+    )
+    st.plotly_chart(fig_status, use_container_width=True)
+
+# -----------------------------------------
+# RAW DATA LEDGER
+# -----------------------------------------
+st.subheader("🔍 Detailed Target Ledger")
+st.dataframe(filtered_df, use_container_width=True)
