@@ -6,23 +6,33 @@ st.set_page_config(layout="wide", page_title="Fulfillment Dashboard")
 st.title("🎯 Customer Target & Fulfillment Dashboard")
 
 # -----------------------------------------
-# NO-KEY GOOGLE SHEETS CONNECTION
+# NO-KEY GOOGLE SHEETS CONNECTION (POSITION BASED)
 # -----------------------------------------
-# 1. Ensure your Sheet ID is pasted perfectly here:
 SHEET_ID = "PASTE_YOUR_LONG_SHEET_ID_HERE"
-
-# 2. This URL structure requests the entire workbook structure from Google
 base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
-@st.cache_data(ttl=300) # Refreshes every 5 minutes
+@st.cache_data(ttl=300)
 def load_data():
-    # We load it as an Excel file (.read_excel) so we can target the exact tab name string
-    return pd.read_excel(base_url, sheet_name="COMPLIANCE DASHBOARD")
+    # Read the workbook file structure first
+    excel_file = pd.ExcelFile(base_url)
+    
+    # Print the tabs we found onto the Streamlit screen to debug live
+    st.sidebar.write("🔍 Tabs found in your sheet:", excel_file.sheet_names)
+    
+    # CHANGE THIS NUMBER: 0 means 1st tab, 1 means 2nd tab, 2 means 3rd tab from the left
+    TARGET_TAB_POSITION = 0 
+    
+    return pd.read_excel(base_url, sheet_name=TARGET_TAB_POSITION)
 
 try:
     df = load_data()
+    
+    # Clean up column names automatically by stripping hidden spaces from your headers
+    df.columns = df.columns.str.strip()
+    
 except Exception as e:
-    st.error("Could not retrieve data. Please ensure 'Anyone with the link' access is enabled, and your sub-sheet name matches 'COMPLIANCE DASHBOARD' exactly.")
+    st.error(f"❌ Connection Error: {e}")
+    st.info("💡 Troubleshooting: Check if your Sheet ID is correct and 'Anyone with the link' is active.")
     st.stop()
 
 # -----------------------------------------
