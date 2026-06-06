@@ -141,4 +141,143 @@ if qty_range is not None:
     ]
 
 # -----------------------------------------
-# CORE KPI METRICS (EXPANDED TO 5
+# CORE KPI METRICS (EXPANDED TO 5 BLOCKS)
+# -----------------------------------------
+st.subheader("📋 Performance Overview")
+
+# Set up 5 columns side-by-side
+kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
+
+# Safely aggregate data fields while filtering string noise
+def safe_sum(dataframe, column_name):
+    if column_name in dataframe.columns:
+        return int(pd.to_numeric(dataframe[column_name], errors='coerce').fillna(0).sum())
+    return 0
+
+total_target = safe_sum(filtered_df, promise_col)
+planned_achieved = safe_sum(filtered_df, planned_col)
+unplanned_achieved = safe_sum(filtered_df, unplanned_col)
+
+# Calculate total sales volume (Planned + Unplanned Organic Sales)
+total_sales_volume = planned_achieved + unplanned_achieved
+
+if type_col in filtered_df.columns and balance_col in filtered_df.columns:
+    promise_mask = filtered_df[type_col].str.lower().str.contains("promise", na=False)
+    total_balance_lapse = int(pd.to_numeric(filtered_df[promise_mask][balance_col], errors='coerce').fillna(0).sum())
+else:
+    total_balance_lapse = 0
+
+# Calculate target clearance rate as a clean percentage layout
+target_clearance_rate = (planned_achieved / total_target * 100) if total_target > 0 else 100.0
+
+# KPI Box 1: Total Promised Target
+with kpi1:
+    st.markdown(
+        f"""
+        <div style="background-color: #f7fafc; padding: 15px 10px; border-radius: 10px; border-left: 5px solid #3182ce; text-align: center; box-shadow: 1px 1px 5px rgba(0,0,0,0.05); min-height: 110px;">
+            <p style="margin: 0; font-size: 12px; color: #4a5568; font-weight: bold; text-transform: uppercase;">Total Promised Target</p>
+            <h2 style="margin: 8px 0 0 0; color: #2b6cb0; font-size: 24px;">{total_target:,} <span style="font-size: 12px; color: #718096;">units</span></h2>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# KPI Box 2: Planned Qty Achieved
+with kpi2:
+    clearance_color = "#319795" if target_clearance_rate >= 75 else "#dd6b20"
+    st.markdown(
+        f"""
+        <div style="background-color: #f7fafc; padding: 15px 10px; border-radius: 10px; border-left: 5px solid #319795; text-align: center; box-shadow: 1px 1px 5px rgba(0,0,0,0.05); min-height: 110px;">
+            <p style="margin: 0; font-size: 12px; color: #4a5568; font-weight: bold; text-transform: uppercase;">Planned Qty Achieved</p>
+            <h2 style="margin: 8px 0 0 0; color: #234e52; font-size: 24px;">{planned_achieved:,} <span style="font-size: 12px; color: #718096;">units</span></h2>
+            <p style="margin: 3px 0 0 0; font-size: 12px; color: {clearance_color}; font-weight: bold;">🎯 Clearance: {target_clearance_rate:.1f}%</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# KPI Box 3: Target Deficit Balance
+with kpi3:
+    st.markdown(
+        f"""
+        <div style="background-color: #fff5f5; padding: 15px 10px; border-radius: 10px; border-left: 5px solid #e53e3e; text-align: center; box-shadow: 1px 1px 5px rgba(0,0,0,0.05); min-height: 110px;">
+            <p style="margin: 0; font-size: 12px; color: #9b2c2c; font-weight: bold; text-transform: uppercase;">Target Deficit Balance</p>
+            <h2 style="margin: 8px 0 0 0; color: #9b2c2c; font-size: 24px;">{total_balance_lapse:,} <span style="font-size: 12px; color: #c53030;">units</span></h2>
+            <p style="margin: 3px 0 0 0; font-size: 11px; color: #e53e3e; font-weight: bold;">⚠️ Missing from Target</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# KPI Box 4: Organic Unplanned Sales
+with kpi4:
+    st.markdown(
+        f"""
+        <div style="background-color: #f7fafc; padding: 15px 10px; border-radius: 10px; border-left: 5px solid #805ad5; text-align: center; box-shadow: 1px 1px 5px rgba(0,0,0,0.05); min-height: 110px;">
+            <p style="margin: 0; font-size: 12px; color: #4a5568; font-weight: bold; text-transform: uppercase;">Organic Unplanned Sales</p>
+            <h2 style="margin: 8px 0 0 0; color: #553c9a; font-size: 24px;">{unplanned_achieved:,} <span style="font-size: 12px; color: #718096;">units</span></h2>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# KPI Box 5: Total Sales Made (Planned + Organic Gross Volume)
+with kpi5:
+    st.markdown(
+        f"""
+        <div style="background-color: #f0fff4; padding: 15px 10px; border-radius: 10px; border-left: 5px solid #38a169; text-align: center; box-shadow: 1px 1px 5px rgba(0,0,0,0.05); min-height: 110px;">
+            <p style="margin: 0; font-size: 12px; color: #22543d; font-weight: bold; text-transform: uppercase;">Total Sales Made</p>
+            <h2 style="margin: 8px 0 0 0; color: #276749; font-size: 24px;">{total_sales_volume:,} <span style="font-size: 12px; color: #48bb78;">units</span></h2>
+            <p style="margin: 3px 0 0 0; font-size: 11px; color: #38a169; font-weight: bold;">📈 Total Output</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+st.markdown("---")
+
+# -----------------------------------------
+# VISUAL CHARTS
+# -----------------------------------------
+col_left, col_right = st.columns(2)
+
+with col_left:
+    st.subheader("Target vs Planned Achievement per Client")
+    if promise_col in filtered_df.columns and planned_col in filtered_df.columns and name_col in filtered_df.columns:
+        promise_df = filtered_df[pd.to_numeric(filtered_df[promise_col], errors='coerce').fillna(0) > 0]
+        
+        if not promise_df.empty:
+            df_melted = promise_df.melt(
+                id_vars=[name_col], 
+                value_vars=[promise_col, planned_col],
+                var_name="Metric", value_name="Units"
+            )
+            fig_targets = px.bar(
+                df_melted, x=name_col, y="Units", color="Metric",
+                barmode="group", color_discrete_sequence=["#3182ce", "#319795"]
+            )
+            st.plotly_chart(fig_targets, use_container_width=True)
+        else:
+            st.info("No active promise target customers found within the current filter scope.")
+    else:
+        st.warning("Awaiting clear customer data to generate comparative metrics.")
+
+with col_right:
+    st.subheader("Account Allocation Status Mix")
+    if status_col in filtered_df.columns:
+        status_counts = filtered_df[status_col].value_counts().reset_index()
+        status_counts.columns = ["Fulfillment Status", "Count"]
+        
+        fig_status = px.pie(
+            status_counts, names="Fulfillment Status", values="Count",
+            hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe
+        )
+        st.plotly_chart(fig_status, use_container_width=True)
+    else:
+        st.warning("Awaiting operational status metrics.")
+
+# -----------------------------------------
+# RAW DATA LEDGER
+# -----------------------------------------
+st.subheader("🔍 Detailed Target Ledger")
+st.dataframe(filtered_df, use_container_width=True)
