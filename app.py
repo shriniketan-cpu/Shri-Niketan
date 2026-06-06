@@ -9,7 +9,7 @@ st.title("🎯 Customer Target & Fulfillment Dashboard")
 # NO-KEY GOOGLE SHEETS CONNECTION (FIRST POSITION)
 # -----------------------------------------
 # 1. Ensure your Sheet ID is pasted perfectly here:
-SHEET_ID = "https://docs.google.com/spreadsheets/d/15jP3vpX1cgH84UxmOU55clAU2BEk55hu9UhHHJDT4qk/edit?gid=837089170#gid=837089170"
+SHEET_ID = "15jP3vpX1cgH84UxmOU55clAU2BEk55hu9UhHHJDT4qk"
 
 # 2. Requesting the spreadsheet file directly
 base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
