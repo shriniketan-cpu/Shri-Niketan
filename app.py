@@ -8,20 +8,21 @@ st.title("🎯 Customer Target & Fulfillment Dashboard")
 # -----------------------------------------
 # NO-KEY GOOGLE SHEETS CONNECTION
 # -----------------------------------------
-# 1. PASTE YOUR SHEET ID HERE:
-SHEET_ID = "https://docs.google.com/spreadsheets/d/15jP3vpX1cgH84UxmOU55clAU2BEk55hu9UhHHJDT4qk/edit?gid=837089170#gid=837089170"
+# 1. Ensure your Sheet ID is pasted perfectly here:
+SHEET_ID = "PASTE_YOUR_LONG_SHEET_ID_HERE"
 
-# 2. This URL tells Google Sheets to export your specific data tab as a CSV file
-csv_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+# 2. This URL structure requests the entire workbook structure from Google
+base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
-@st.cache_data(ttl=300) # Refreshes and pulls fresh data from your sheet every 5 minutes
+@st.cache_data(ttl=300) # Refreshes every 5 minutes
 def load_data():
-    return pd.read_csv(csv_url)
+    # We load it as an Excel file (.read_excel) so we can target the exact tab name string
+    return pd.read_excel(base_url, sheet_name="COMPLIANCE DASHBOARD")
 
 try:
     df = load_data()
 except Exception as e:
-    st.error("Could not retrieve data. Please ensure 'Anyone with the link' access is enabled on your Google Sheet.")
+    st.error("Could not retrieve data. Please ensure 'Anyone with the link' access is enabled, and your sub-sheet name matches 'COMPLIANCE DASHBOARD' exactly.")
     st.stop()
 
 # -----------------------------------------
