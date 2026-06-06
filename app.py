@@ -16,12 +16,25 @@ base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xls
 
 @st.cache_data(ttl=300) # Refreshes and grabs fresh data every 5 minutes
 def load_data():
-    # sheet_name=0 explicitly commands Pandas to pull the leftmost tab
-    data = pd.read_excel(base_url, sheet_name=0)
+    # Read the first tab position raw without assuming where headers are
+    raw_data = pd.read_excel(base_url, sheet_name=0, header=None)
     
-    # Data Cleaning: Strip hidden trailing spaces from header column names
-    data.columns = data.columns.str.strip()
-    return data
+    # Dynamic Header Search: Find the first row that actually contains your data columns
+    header_row_index = 0
+    for idx, row in raw_data.iterrows():
+        row_str = row.astype(str).str.lower().values
+        # Search for any core keyword unique to your operational columns
+        if 'customer name' in row_str or 'promise qty' in row_str or 'category' in row_str:
+            header_row_index = idx
+            break
+            
+    # Reload the file, dropping everything above your actual headers
+    cleaned_data = pd.read_excel(base_url, sheet_name=0, skiprows=header_row_index)
+    
+    # Ensure all column headers are strings and strip out empty spaces
+    cleaned_data.columns = [str(col).strip() for col in cleaned_data.columns]
+    
+    return cleaned_data
 
 try:
     df = load_data()
@@ -31,25 +44,25 @@ except Exception as e:
     st.stop()
 
 # -----------------------------------------
-# AUTODETECT COLUMNS (Fixes KeyErrors dynamically)
+# AUTODETECT COLUMNS (Bypasses Attribute and KeyErrors)
 # -----------------------------------------
-# Map column names to lowercase to bypass capitalization mismatches
-col_map = {col.lower(): col for col in df.columns}
+# Filter out any unexpected non-string columns just in case
+valid_columns = [col for col in df.columns if isinstance(col, str) and not col.startswith("Unnamed:")]
+col_map = {col.lower(): col for col in valid_columns}
 
-# Identify key columns by matching lowercase variants or falling back to positional order
-name_col = col_map.get("customer name", df.columns[0])
-category_col = col_map.get("category", df.columns[1] if len(df.columns) > 1 else df.columns[0])
-month_col = col_map.get("month", df.columns[2] if len(df.columns) > 2 else df.columns[0])
+# Identify operational columns
+name_col = col_map.get("customer name", df.columns[0] if len(df.columns) > 0 else "Customer Name")
+category_col = col_map.get("category", col_map.get("product category", "Category"))
+month_col = col_map.get("month", "Month")
 
 promise_col = col_map.get("promise qty", "Promise Qty")
 planned_col = col_map.get("planned customer qty achieved", "Planned Customer Qty Achieved")
 unplanned_col = col_map.get("unplanned customer qty achieved", "Unplanned Customer Qty Achieved")
-total_achieved_col = col_map.get("total achieved qty", "Total Achieved Qty")
 balance_col = col_map.get("balance qty", "Balance Qty")
 status_col = col_map.get("status", "Status")
 type_col = col_map.get("type", "Type")
 
-# Clean text variables dynamically to ensure sidebar filters match data clean-cut
+# Clean text data cells dynamically for reliable filtering
 text_cols_to_clean = [name_col, category_col, month_col, status_col, type_col]
 for col in text_cols_to_clean:
     if col in df.columns:
@@ -81,8 +94,36 @@ if type_col in df.columns:
 else:
     selected_type = "All"
 
+# Dynamic Slider for Promise Qty Range
+if promise_col in df.columns:
+    # Convert column to numbers safely to find true min and max boundaries
+    numeric_promise = pd.to_numeric(df[promise_col], errors='coerce').fillna(0).astype(int)
+    min_qty = int(numeric_promise.min())
+    max_qty = int(numeric_promise.max())
+    
+    # Fallback bounds just in case data is flat
+    if min_qty == max_qty:
+        max_qty = min_qty + 100
+        
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Filter by Promise Qty Range")
+    
+    # Creates the dual-handled range slider
+    qty_range = st.sidebar.slider(
+        "Select Quantity Range",
+        min_value=min_qty,
+        max_value=max_qty,
+        value=(10, 40) if max_qty >= 40 else (min_qty, max_qty), # Defaults to 10 - 40 if possible
+        step=1
+    )
+else:
+    qty_range = None
+
+# -----------------------------------------
 # Apply filter selections
+# -----------------------------------------
 filtered_df = df.copy()
+
 if selected_month != "All":
     filtered_df = filtered_df[filtered_df[month_col] == selected_month]
 if selected_category != "All":
@@ -90,81 +131,14 @@ if selected_category != "All":
 if selected_type != "All":
     filtered_df = filtered_df[filtered_df[type_col] == selected_type]
 
-# -----------------------------------------
-# CORE KPI METRICS
-# -----------------------------------------
-st.subheader("📋 Performance Overview")
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-
-# Safely convert target/achievement strings to real numeric fields for calculations
-total_target = int(pd.to_numeric(filtered_df[promise_col], errors='coerce').fillna(0).sum())
-planned_achieved = int(pd.to_numeric(filtered_df[planned_col], errors='coerce').fillna(0).sum())
-unplanned_achieved = int(pd.to_numeric(filtered_df[unplanned_col], errors='coerce').fillna(0).sum())
-
-# Isolate target lapses strictly from core Promise Customers
-if type_col in filtered_df.columns and balance_col in filtered_df.columns:
-    promise_mask = filtered_df[type_col].str.lower().str.contains("promise", na=False)
-    total_balance_lapse = int(pd.to_numeric(filtered_df[promise_mask][balance_col], errors='coerce').fillna(0).sum())
-else:
-    total_balance_lapse = 0
-
-target_clearance_rate = (planned_achieved / total_target * 100) if total_target > 0 else 100.0
-
-with kpi1:
-    st.metric("Total Promised Target Qty", f"{total_target} units")
-with kpi2:
-    st.metric("Planned Qty Achieved", f"{planned_achieved} units", f"Clearance: {target_clearance_rate:.1f}%")
-with kpi3:
-    st.metric("Target Deficit Balance", f"{total_balance_lapse} units", delta=f"-{total_balance_lapse}", delta_color="inverse")
-with kpi4:
-    st.metric("Organic Unplanned Sales", f"{unplanned_achieved} units")
-
-st.markdown("---")
+# Apply the Promise Qty Range filter logic
+if qty_range is not None:
+    # Safely evaluate row values numerically
+    row_numeric_promise = pd.to_numeric(filtered_df[promise_col], errors='coerce').fillna(0)
+    filtered_df = filtered_df[
+        (row_numeric_promise >= qty_range[0]) & 
+        (row_numeric_promise <= qty_range[1])
+    ]
 
 # -----------------------------------------
-# VISUAL CHARTS
-# -----------------------------------------
-col_left, col_right = st.columns(2)
-
-with col_left:
-    st.subheader("Target vs Planned Achievement per Client")
-    
-    # Isolate accounts where targets exist for a focused side-by-side comparison
-    if promise_col in filtered_df.columns and planned_col in filtered_df.columns:
-        promise_df = filtered_df[pd.to_numeric(filtered_df[promise_col], errors='coerce').fillna(0) > 0]
-        
-        if not promise_df.empty:
-            df_melted = promise_df.melt(
-                id_vars=[name_col], 
-                value_vars=[promise_col, planned_col],
-                var_name="Metric", value_name="Units"
-            )
-            fig_targets = px.bar(
-                df_melted, x=name_col, y="Units", color="Metric",
-                barmode="group", color_discrete_sequence=["#3182ce", "#319795"]
-            )
-            st.plotly_chart(fig_targets, use_container_width=True)
-        else:
-            st.info("No active promise target customers found within the current filter scope.")
-    else:
-        st.warning("Could not build bar chart: Column mismatch on target metrics.")
-
-with col_right:
-    st.subheader("Account Allocation Status Mix")
-    if status_col in filtered_df.columns:
-        status_counts = filtered_df[status_col].value_counts().reset_index()
-        status_counts.columns = ["Fulfillment Status", "Count"]
-        
-        fig_status = px.pie(
-            status_counts, names="Fulfillment Status", values="Count",
-            hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe
-        )
-        st.plotly_chart(fig_status, use_container_width=True)
-    else:
-        st.warning("Could not build status breakdown: 'Status' column not discovered.")
-
-# -----------------------------------------
-# RAW DATA LEDGER
-# -----------------------------------------
-st.subheader("🔍 Detailed Target Ledger")
-st.dataframe(filtered_df, use_container_width=True)
+# CORE KPI METRICS (EXPANDED TO 5
