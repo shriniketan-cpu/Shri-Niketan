@@ -6,33 +6,35 @@ st.set_page_config(layout="wide", page_title="Fulfillment Dashboard")
 st.title("🎯 Customer Target & Fulfillment Dashboard")
 
 # -----------------------------------------
-# NO-KEY GOOGLE SHEETS CONNECTION (POSITION BASED)
+# NO-KEY GOOGLE SHEETS CONNECTION (FIRST POSITION)
 # -----------------------------------------
-SHEET_ID = "PASTE_YOUR_LONG_SHEET_ID_HERE"
+# 1. Ensure your Sheet ID is pasted perfectly here:
+SHEET_ID = "https://docs.google.com/spreadsheets/d/15jP3vpX1cgH84UxmOU55clAU2BEk55hu9UhHHJDT4qk/edit?gid=837089170#gid=837089170"
+
+# 2. Requesting the spreadsheet file directly
 base_url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300) # Refreshes every 5 minutes
 def load_data():
-    # Read the workbook file structure first
-    excel_file = pd.ExcelFile(base_url)
+    # sheet_name=0 explicitly commands Pandas to pull the leftmost tab
+    data = pd.read_excel(base_url, sheet_name=0)
     
-    # Print the tabs we found onto the Streamlit screen to debug live
-    st.sidebar.write("🔍 Tabs found in your sheet:", excel_file.sheet_names)
+    # Data Cleaning: Strip hidden trailing spaces from header column names
+    data.columns = data.columns.str.strip()
     
-    # CHANGE THIS NUMBER: 0 means 1st tab, 1 means 2nd tab, 2 means 3rd tab from the left
-    TARGET_TAB_POSITION = 0 
-    
-    return pd.read_excel(base_url, sheet_name=TARGET_TAB_POSITION)
+    # Data Cleaning: Strip spaces from text columns to make filters reliable
+    text_cols = ["Customer Name", "Category", "Month", "Status", "Type"]
+    for col in text_cols:
+        if col in data.columns:
+            data[col] = data[col].astype(str).str.strip()
+            
+    return data
 
 try:
     df = load_data()
-    
-    # Clean up column names automatically by stripping hidden spaces from your headers
-    df.columns = df.columns.str.strip()
-    
 except Exception as e:
-    st.error(f"❌ Connection Error: {e}")
-    st.info("💡 Troubleshooting: Check if your Sheet ID is correct and 'Anyone with the link' is active.")
+    st.error(f"❌ Could not retrieve data from the 1st sheet tab. Error details: {e}")
+    st.info("💡 Quick Check: Double check that your Google Sheet access is set to 'Anyone with the link can view' and click 'Done'.")
     st.stop()
 
 # -----------------------------------------
@@ -40,7 +42,7 @@ except Exception as e:
 # -----------------------------------------
 st.sidebar.header("Dashboard Filters")
 
-months = ["All"] + list(df["Month"].unique())
+months = ["All"] + sorted(list(df["Month"].unique()))
 selected_month = st.sidebar.selectbox("Filter by Month", months)
 
 categories = ["All"] + list(df["Category"].unique())
@@ -49,7 +51,7 @@ selected_category = st.sidebar.selectbox("Filter by Product Category", categorie
 types = ["All"] + list(df["Type"].unique())
 selected_type = st.sidebar.selectbox("Customer Type Filter", types)
 
-# Apply filters
+# Apply filter selections
 filtered_df = df.copy()
 if selected_month != "All":
     filtered_df = filtered_df[filtered_df["Month"] == selected_month]
@@ -64,10 +66,14 @@ if selected_type != "All":
 st.subheader("📋 Performance Overview")
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-total_target = int(filtered_df["Promise Qty"].sum())
-planned_achieved = int(filtered_df["Planned Customer Qty Achieved"].sum())
-unplanned_achieved = int(filtered_df["Unplanned Customer Qty Achieved"].sum())
-total_balance_lapse = int(filtered_df[filtered_df["Type"] == "Promise Customer"]["Balance Qty"].sum())
+# Force metrics to numeric types to prevent rendering errors
+total_target = int(pd.to_numeric(filtered_df["Promise Qty"], errors='coerce').sum())
+planned_achieved = int(pd.to_numeric(filtered_df["Planned Customer Qty Achieved"], errors='coerce').sum())
+unplanned_achieved = int(pd.to_numeric(filtered_df["Unplanned Customer Qty Achieved"], errors='coerce').sum())
+
+# Calculate strict target deficit balance
+promise_mask = filtered_df["Type"] == "Promise Customer"
+total_balance_lapse = int(pd.to_numeric(filtered_df[promise_mask]["Balance Qty"], errors='coerce').sum())
 
 target_clearance_rate = (planned_achieved / total_target * 100) if total_target > 0 else 100.0
 
@@ -89,7 +95,8 @@ col_left, col_right = st.columns(2)
 
 with col_left:
     st.subheader("Target vs Planned Achievement per Client")
-    promise_df = filtered_df[filtered_df["Promise Qty"] > 0]
+    promise_df = filtered_df[pd.to_numeric(filtered_df["Promise Qty"], errors='coerce') > 0]
+    
     if not promise_df.empty:
         df_melted = promise_df.melt(
             id_vars=["Customer Name"], 
