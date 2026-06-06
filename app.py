@@ -101,27 +101,23 @@ if promise_col in df.columns:
     min_qty = int(numeric_promise.min())
     max_qty = int(numeric_promise.max())
     
-    # Fallback bounds just in case data is flat
     if min_qty == max_qty:
         max_qty = min_qty + 100
         
     st.sidebar.markdown("---")
     st.sidebar.subheader("Filter by Promise Qty Range")
     
-    # Creates the dual-handled range slider
     qty_range = st.sidebar.slider(
         "Select Quantity Range",
         min_value=min_qty,
         max_value=max_qty,
-        value=(10, 40) if max_qty >= 40 else (min_qty, max_qty), # Defaults to 10 - 40 if possible
+        value=(10, 40) if max_qty >= 40 else (min_qty, max_qty),
         step=1
     )
 else:
     qty_range = None
 
-# -----------------------------------------
 # Apply filter selections
-# -----------------------------------------
 filtered_df = df.copy()
 
 if selected_month != "All":
@@ -131,9 +127,7 @@ if selected_category != "All":
 if selected_type != "All":
     filtered_df = filtered_df[filtered_df[type_col] == selected_type]
 
-# Apply the Promise Qty Range filter logic
 if qty_range is not None:
-    # Safely evaluate row values numerically
     row_numeric_promise = pd.to_numeric(filtered_df[promise_col], errors='coerce').fillna(0)
     filtered_df = filtered_df[
         (row_numeric_promise >= qty_range[0]) & 
@@ -141,14 +135,11 @@ if qty_range is not None:
     ]
 
 # -----------------------------------------
-# CORE KPI METRICS (EXPANDED TO 5 BLOCKS)
+# CORE KPI METRICS (5 BLOCKS)
 # -----------------------------------------
 st.subheader("📋 Performance Overview")
-
-# Set up 5 columns side-by-side
 kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
 
-# Safely aggregate data fields while filtering string noise
 def safe_sum(dataframe, column_name):
     if column_name in dataframe.columns:
         return int(pd.to_numeric(dataframe[column_name], errors='coerce').fillna(0).sum())
@@ -157,8 +148,6 @@ def safe_sum(dataframe, column_name):
 total_target = safe_sum(filtered_df, promise_col)
 planned_achieved = safe_sum(filtered_df, planned_col)
 unplanned_achieved = safe_sum(filtered_df, unplanned_col)
-
-# Calculate total sales volume (Planned + Unplanned Organic Sales)
 total_sales_volume = planned_achieved + unplanned_achieved
 
 if type_col in filtered_df.columns and balance_col in filtered_df.columns:
@@ -167,10 +156,8 @@ if type_col in filtered_df.columns and balance_col in filtered_df.columns:
 else:
     total_balance_lapse = 0
 
-# Calculate target clearance rate as a clean percentage layout
 target_clearance_rate = (planned_achieved / total_target * 100) if total_target > 0 else 100.0
 
-# KPI Box 1: Total Promised Target
 with kpi1:
     st.markdown(
         f"""
@@ -178,11 +165,9 @@ with kpi1:
             <p style="margin: 0; font-size: 12px; color: #4a5568; font-weight: bold; text-transform: uppercase;">Total Promised Target</p>
             <h2 style="margin: 8px 0 0 0; color: #2b6cb0; font-size: 24px;">{total_target:,} <span style="font-size: 12px; color: #718096;">units</span></h2>
         </div>
-        """, 
-        unsafe_allow_html=True
+        """, unsafe_allow_html=True
     )
 
-# KPI Box 2: Planned Qty Achieved
 with kpi2:
     clearance_color = "#319795" if target_clearance_rate >= 75 else "#dd6b20"
     st.markdown(
@@ -192,11 +177,9 @@ with kpi2:
             <h2 style="margin: 8px 0 0 0; color: #234e52; font-size: 24px;">{planned_achieved:,} <span style="font-size: 12px; color: #718096;">units</span></h2>
             <p style="margin: 3px 0 0 0; font-size: 12px; color: {clearance_color}; font-weight: bold;">🎯 Clearance: {target_clearance_rate:.1f}%</p>
         </div>
-        """, 
-        unsafe_allow_html=True
+        """, unsafe_allow_html=True
     )
 
-# KPI Box 3: Target Deficit Balance
 with kpi3:
     st.markdown(
         f"""
@@ -205,11 +188,9 @@ with kpi3:
             <h2 style="margin: 8px 0 0 0; color: #9b2c2c; font-size: 24px;">{total_balance_lapse:,} <span style="font-size: 12px; color: #c53030;">units</span></h2>
             <p style="margin: 3px 0 0 0; font-size: 11px; color: #e53e3e; font-weight: bold;">⚠️ Missing from Target</p>
         </div>
-        """, 
-        unsafe_allow_html=True
+        """, unsafe_allow_html=True
     )
 
-# KPI Box 4: Organic Unplanned Sales
 with kpi4:
     st.markdown(
         f"""
@@ -217,11 +198,9 @@ with kpi4:
             <p style="margin: 0; font-size: 12px; color: #4a5568; font-weight: bold; text-transform: uppercase;">Organic Unplanned Sales</p>
             <h2 style="margin: 8px 0 0 0; color: #553c9a; font-size: 24px;">{unplanned_achieved:,} <span style="font-size: 12px; color: #718096;">units</span></h2>
         </div>
-        """, 
-        unsafe_allow_html=True
+        """, unsafe_allow_html=True
     )
 
-# KPI Box 5: Total Sales Made (Planned + Organic Gross Volume)
 with kpi5:
     st.markdown(
         f"""
@@ -230,9 +209,59 @@ with kpi5:
             <h2 style="margin: 8px 0 0 0; color: #276749; font-size: 24px;">{total_sales_volume:,} <span style="font-size: 12px; color: #48bb78;">units</span></h2>
             <p style="margin: 3px 0 0 0; font-size: 11px; color: #38a169; font-weight: bold;">📈 Total Output</p>
         </div>
-        """, 
-        unsafe_allow_html=True
+        """, unsafe_allow_html=True
     )
+
+st.markdown("---")
+
+# -----------------------------------------
+# AI INSIGHTS ENGINE
+# -----------------------------------------
+st.subheader("🤖 AI Operational Insights")
+
+if name_col in filtered_df.columns and balance_col in filtered_df.columns:
+    temp_df = filtered_df.copy()
+    temp_df["_numeric_balance"] = pd.to_numeric(temp_df[balance_col], errors='coerce').fillna(0)
+    temp_df["_numeric_promise"] = pd.to_numeric(temp_df[promise_col], errors='coerce').fillna(0)
+    temp_df["_numeric_planned"] = pd.to_numeric(temp_df[planned_col], errors='coerce').fillna(0)
+    
+    deficit_df = temp_df[temp_df["_numeric_balance"] > 0].sort_values(by="_numeric_balance", ascending=False)
+    
+    temp_df["_clearance_pct"] = (temp_df["_numeric_planned"] / temp_df["_numeric_promise"] * 100).fillna(0)
+    star_performer_df = temp_df[temp_df["_numeric_promise"] > 0].sort_values(by="_clearance_pct", ascending=False)
+
+    insight_col1, insight_col2, insight_col3 = st.columns(3)
+    
+    with insight_col1:
+        st.markdown("##### 🚨 Highest Deficit Risk")
+        if not deficit_df.empty:
+            top_risk_client = deficit_df.iloc[0][name_col]
+            top_risk_qty = int(deficit_df.iloc[0]["_numeric_balance"])
+            st.warning(f"**{top_risk_client}** requires immediate attention. It represents the largest target deficit in your current scope, missing **{top_risk_qty:,} units** to fulfill its promise.")
+        else:
+            st.success("🎉 Excellent! No accounts in the current filtered selection are suffering from a target deficit.")
+
+    with insight_col2:
+        st.markdown("##### ⭐ Top Performer Account")
+        if not star_performer_df.empty and star_performer_df.iloc[0]["_clearance_pct"] > 0:
+            top_star_client = star_performer_df.iloc[0][name_col]
+            top_star_pct = star_performer_df.iloc[0]["_clearance_pct"]
+            st.info(f"**{top_star_client}** is leading fulfillment operations with a **{top_star_pct:.1f}% target clearance rate**.")
+        else:
+            st.info("ℹ️ No active target fulfillment progress detected in this filtered view yet.")
+
+    with insight_col3:
+        st.markdown("##### 📈 Volume Balance Analysis")
+        if unplanned_achieved > planned_achieved and planned_achieved > 0:
+            ratio = unplanned_achieved / planned_achieved
+            st.error(f"**Alert:** Organic unplanned sales outpace planned contracts by **{ratio:.1f}x**.")
+        elif unplanned_achieved > 0 and total_target > 0:
+            pct_organic = (unplanned_achieved / (planned_achieved + unplanned_achieved)) * 100
+            st.success(f"**Healthy Mix:** Organic market sales are providing a solid **{pct_organic:.1f}% buffer** to gross volume.")
+        else:
+            st.info("📊 Awaiting data variations to run volume balance diagnostics.")
+else:
+    st.info("🤖 AI Engine is waiting for structured columns to compile strategic insights.")
 
 st.markdown("---")
 
@@ -276,8 +305,25 @@ with col_right:
     else:
         st.warning("Awaiting operational status metrics.")
 
+st.markdown("---")
+
 # -----------------------------------------
-# RAW DATA LEDGER
+# RAW DATA LEDGER WITH PERCENTAGE FORMATTING
 # -----------------------------------------
 st.subheader("🔍 Detailed Target Ledger")
-st.dataframe(filtered_df, use_container_width=True)
+
+display_df = filtered_df.copy()
+
+# Automatically discover and format any clearance percentage column rows cleanly
+clearance_col_candidates = [col for col in display_df.columns if "clear" in col.lower() or "pct" in col.lower() or "%" in col]
+
+for col in clearance_col_candidates:
+    numeric_vals = pd.to_numeric(display_df[col], errors='coerce').fillna(0)
+    
+    # Check if numbers are stored as small decimals (e.g., 0.046 instead of 4.6)
+    if numeric_vals.max() <= 1.0 and numeric_vals.sum() > 0:
+        numeric_vals = numeric_vals * 100
+        
+    display_df[col] = numeric_vals.map("{:.1f}%".format)
+
+st.dataframe(display_df, use_container_width=True)
